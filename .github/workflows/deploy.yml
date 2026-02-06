@@ -26,7 +26,9 @@ jobs:
         run: npm ci
 
       - name: Build Web
-        run: npx expo export -p web
+        run: |
+          npx expo export -p web
+          touch dist/.nojekyll
         env:
           EXPO_PUBLIC_GEMINI_API_KEY: ${{ secrets.EXPO_PUBLIC_GEMINI_API_KEY }}
 
