@@ -9,6 +9,10 @@ import {
   Alert,
   TextInput,
   ActivityIndicator,
+  SafeAreaView,
+  Platform,
+  StatusBar,
+  Linking,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import * as Calendar from 'expo-calendar';
@@ -140,8 +144,38 @@ export default function App() {
     }
   };
 
-  // カレンダーに追加
+  // Googleカレンダー用のURLを作成 (Web用)
+  const createGoogleCalendarUrl = (shift) => {
+    const formatDate = (dateString, timeString) => {
+      // YYYY-MM-DD と HH:MM を結合して YYYYMMDDTHHMM00 形式にする
+      // 区切り文字(-)を削除
+      const date = dateString.replace(/-/g, '');
+      const time = timeString.replace(/:/g, '');
+      return `${date}T${time}00`;
+    };
+
+    const start = formatDate(shift.date, shift.startTime);
+    const end = formatDate(shift.date, shift.endTime);
+    const title = encodeURIComponent(shift.title || 'シフト');
+
+    // ctz=Asia/Tokyo でタイムゾーン指定
+    return `https://www.google.com/calendar/render?action=TEMPLATE&text=${title}&dates=${start}/${end}&ctz=Asia/Tokyo`;
+  };
+
+  // Webでカレンダーに追加ボタンが押されたとき
+  const addToGoogleCalendarWeb = (shift) => {
+    const url = createGoogleCalendarUrl(shift);
+    Linking.openURL(url);
+  };
+
+  // カレンダーに追加ボタンが押されたとき (Mobile用)
   const addToCalendar = async () => {
+    // Webの場合はボタン自体を表示しないか、処理を分けるためここはNative専用
+    if (Platform.OS === 'web') {
+      Alert.alert('お知らせ', '各予定の「Googleカレンダーに追加」ボタンを使用してください。');
+      return;
+    }
+
     if (shifts.length === 0) {
       Alert.alert('エラー', '登録する予定がありません');
       return;
@@ -155,10 +189,15 @@ export default function App() {
       }
 
       const calendars = await Calendar.getCalendarsAsync(Calendar.EntityTypes.EVENT);
-      const defaultCalendar = calendars.find((cal) => cal.isPrimary) || calendars[0];
+      // 1. デフォルトカレンダーを探す（iOSなど）
+      let targetCalendar = calendars.find((cal) => cal.isPrimary);
+      // 2. 見つからない場合、書き込み可能な最初のカレンダーを使う（AndroidのGoogleカレンダーなど）
+      if (!targetCalendar) {
+        targetCalendar = calendars.find((cal) => cal.allowsModifications);
+      }
 
-      if (!defaultCalendar) {
-        Alert.alert('エラー', 'カレンダーが見つかりません');
+      if (!targetCalendar) {
+        Alert.alert('エラー', '書き込み可能なカレンダーが見つかりません');
         return;
       }
 
@@ -168,7 +207,7 @@ export default function App() {
           const startDate = new Date(`${shift.date}T${shift.startTime}:00`);
           const endDate = new Date(`${shift.date}T${shift.endTime}:00`);
 
-          await Calendar.createEventAsync(defaultCalendar.id, {
+          await Calendar.createEventAsync(targetCalendar.id, {
             title: shift.title,
             startDate: startDate,
             endDate: endDate,
@@ -220,124 +259,195 @@ export default function App() {
     setShifts((prevShifts) => prevShifts.filter((shift) => shift.id !== id));
   };
 
+  const isWeb = Platform.OS === 'web';
+
   return (
-    <ScrollView style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.title}>ラクラクカレンダー</Text>
-        <Text style={styles.subtitle}>シフト表を撮影して自動登録</Text>
-      </View>
-
-      {!image && !editing && (
-        <View style={styles.buttonContainer}>
-          <TouchableOpacity style={styles.button} onPress={pickImage}>
-            <Text style={styles.buttonText}>📁 ギャラリーから選択</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.button} onPress={takePhoto}>
-            <Text style={styles.buttonText}>📷 カメラで撮影</Text>
-          </TouchableOpacity>
-        </View>
-      )}
-
-      {image && !editing && (
-        <View style={styles.imageContainer}>
-          <Image source={{ uri: image.uri }} style={styles.image} />
-          {loading && (
-            <View style={styles.loadingOverlay}>
-              <ActivityIndicator size="large" color="#007AFF" />
-              <Text style={styles.loadingText}>Geminiが解析中...</Text>
+    <SafeAreaView style={styles.safeArea}>
+      <StatusBar barStyle="light-content" />
+      <View style={isWeb ? styles.webOuterContainer : styles.flexContainer}>
+        <View style={isWeb ? styles.webInnerCard : styles.flexContainer}>
+          <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
+            <View style={styles.header}>
+              <Text style={styles.title}>ラクラクカレンダー</Text>
+              <Text style={styles.subtitle}>シフト表を撮影して自動登録</Text>
             </View>
-          )}
-        </View>
-      )}
 
-      {editing && shifts.length > 0 && (
-        <View style={styles.shiftsContainer}>
-          <Text style={styles.sectionTitle}>抽出された予定</Text>
-          <Text style={styles.sectionSubtitle}>内容を確認・編集してください</Text>
-
-          {shifts.map((shift) => (
-            <View key={shift.id} style={styles.shiftCard}>
-              <TextInput
-                style={styles.input}
-                value={shift.date}
-                onChangeText={(text) => updateShift(shift.id, 'date', text)}
-                placeholder="日付 (YYYY-MM-DD)"
-              />
-              <View style={styles.timeRow}>
-                <TextInput
-                  style={[styles.input, styles.timeInput]}
-                  value={shift.startTime}
-                  onChangeText={(text) => updateShift(shift.id, 'startTime', text)}
-                  placeholder="開始 (HH:MM)"
-                />
-                <Text style={styles.timeSeparator}>〜</Text>
-                <TextInput
-                  style={[styles.input, styles.timeInput]}
-                  value={shift.endTime}
-                  onChangeText={(text) => updateShift(shift.id, 'endTime', text)}
-                  placeholder="終了 (HH:MM)"
-                />
+            {!image && !editing && (
+              <View style={styles.buttonContainer}>
+                <TouchableOpacity style={styles.button} onPress={pickImage}>
+                  <Text style={styles.buttonText}>📁 ギャラリーから選択</Text>
+                </TouchableOpacity>
+                {!Platform.OS === 'web' && (
+                  <TouchableOpacity style={styles.button} onPress={takePhoto}>
+                    <Text style={styles.buttonText}>📷 カメラで撮影</Text>
+                  </TouchableOpacity>
+                )}
+                {Platform.OS === 'web' && (
+                  <Text style={styles.webNote}>※PCではカメラ撮影の代わりにファイルをアップロードしてください</Text>
+                )}
               </View>
-              <TextInput
-                style={styles.input}
-                value={shift.title}
-                onChangeText={(text) => updateShift(shift.id, 'title', text)}
-                placeholder="予定のタイトル"
-              />
-              <TouchableOpacity
-                style={styles.deleteButton}
-                onPress={() => deleteShift(shift.id)}
-              >
-                <Text style={styles.deleteButtonText}>削除</Text>
-              </TouchableOpacity>
-            </View>
-          ))}
+            )}
 
-          <TouchableOpacity style={styles.addButton} onPress={addToCalendar}>
-            <Text style={styles.addButtonText}>カレンダーに登録</Text>
-          </TouchableOpacity>
+            {image && !editing && (
+              <View style={styles.imageContainer}>
+                <Image source={{ uri: image.uri }} style={styles.image} />
+                {loading && (
+                  <View style={styles.loadingOverlay}>
+                    <ActivityIndicator size="large" color="#007AFF" />
+                    <Text style={styles.loadingText}>解析中...</Text>
+                  </View>
+                )}
+              </View>
+            )}
 
-          <TouchableOpacity
-            style={styles.cancelButton}
-            onPress={() => {
-              setImage(null);
-              setShifts([]);
-              setEditing(false);
-            }}
-          >
-            <Text style={styles.cancelButtonText}>キャンセル</Text>
-          </TouchableOpacity>
+            {/* Web版のみQRコードを表示（モバイルで読み取り用） */}
+            {Platform.OS === 'web' && !image && !editing && (
+              <View style={styles.qrContainer}>
+                <Text style={styles.qrTitle}>スマホで読み取ってモバイルで開く</Text>
+                <Image
+                  style={{ width: 150, height: 150 }}
+                  source={{ uri: `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent('http://10.6.4.54:8083')}` }}
+                />
+                <Text style={styles.qrNote}>※同じWi-Fiに接続している必要があります</Text>
+              </View>
+            )}
+
+            {editing && shifts.length > 0 && (
+              <View style={styles.shiftsContainer}>
+                <Text style={styles.sectionTitle}>抽出された予定</Text>
+                <Text style={styles.sectionSubtitle}>内容を確認・編集してください</Text>
+
+                {shifts.map((shift) => (
+                  <View key={shift.id} style={styles.shiftCard}>
+                    <TextInput
+                      style={styles.input}
+                      value={shift.date}
+                      onChangeText={(text) => updateShift(shift.id, 'date', text)}
+                      placeholder="日付 (YYYY-MM-DD)"
+                    />
+                    <View style={styles.timeRow}>
+                      <TextInput
+                        style={[styles.input, styles.timeInput]}
+                        value={shift.startTime}
+                        onChangeText={(text) => updateShift(shift.id, 'startTime', text)}
+                        placeholder="開始 (HH:MM)"
+                      />
+                      <Text style={styles.timeSeparator}>〜</Text>
+                      <TextInput
+                        style={[styles.input, styles.timeInput]}
+                        value={shift.endTime}
+                        onChangeText={(text) => updateShift(shift.id, 'endTime', text)}
+                        placeholder="終了 (HH:MM)"
+                      />
+                    </View>
+                    <TextInput
+                      style={styles.input}
+                      value={shift.title}
+                      onChangeText={(text) => updateShift(shift.id, 'title', text)}
+                      placeholder="予定のタイトル"
+                    />
+
+                    {Platform.OS === 'web' ? (
+                      <TouchableOpacity
+                        style={styles.webCalButton}
+                        onPress={() => addToGoogleCalendarWeb(shift)}
+                      >
+                        <Text style={styles.webCalButtonText}>📅 Googleカレンダーに追加</Text>
+                      </TouchableOpacity>
+                    ) : null}
+
+                    <TouchableOpacity
+                      style={styles.deleteButton}
+                      onPress={() => deleteShift(shift.id)}
+                    >
+                      <Text style={styles.deleteButtonText}>削除</Text>
+                    </TouchableOpacity>
+                  </View>
+                ))}
+
+                {Platform.OS !== 'web' && (
+                  <TouchableOpacity style={styles.addButton} onPress={addToCalendar}>
+                    <Text style={styles.addButtonText}>カレンダーに一括登録</Text>
+                  </TouchableOpacity>
+                )}
+
+                <TouchableOpacity
+                  style={styles.cancelButton}
+                  onPress={() => {
+                    setImage(null);
+                    setShifts([]);
+                    setEditing(false);
+                  }}
+                >
+                  <Text style={styles.cancelButtonText}>キャンセル</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+
+            {editing && shifts.length === 0 && (
+              <View style={styles.emptyContainer}>
+                <Text style={styles.emptyText}>予定が見つかりませんでした</Text>
+                <TouchableOpacity
+                  style={styles.button}
+                  onPress={() => {
+                    setImage(null);
+                    setEditing(false);
+                  }}
+                >
+                  <Text style={styles.buttonText}>戻る</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+          </ScrollView>
         </View>
-      )}
-
-      {editing && shifts.length === 0 && (
-        <View style={styles.emptyContainer}>
-          <Text style={styles.emptyText}>予定が見つかりませんでした</Text>
-          <TouchableOpacity
-            style={styles.button}
-            onPress={() => {
-              setImage(null);
-              setEditing(false);
-            }}
-          >
-            <Text style={styles.buttonText}>戻る</Text>
-          </TouchableOpacity>
-        </View>
-      )}
-    </ScrollView>
+      </View>
+    </SafeAreaView>
   );
 }
 
+
 const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+    backgroundColor: '#3E2723', // Dark Brown Background
+  },
+  flexContainer: {
+    flex: 1,
+  },
+  webOuterContainer: {
+    flex: 1,
+    backgroundColor: '#EFEBE9', // Light Beige Background
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  webInnerCard: {
+    width: '100%',
+    maxWidth: 500,
+    height: '100%',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.1,
+    shadowRadius: 20,
+    elevation: 10,
+  },
   container: {
     flex: 1,
-    backgroundColor: '#F5F5F5',
+    backgroundColor: '#FAFAFA',
+  },
+  contentContainer: {
+    flexGrow: 1,
+    paddingBottom: 40,
   },
   header: {
-    backgroundColor: '#007AFF',
-    padding: 40,
-    paddingTop: 60,
+    backgroundColor: '#4E342E', // Dark Brown
+    padding: 30,
+    paddingTop: 30,
     alignItems: 'center',
+    marginBottom: 10,
   },
   title: {
     fontSize: 28,
@@ -347,7 +457,7 @@ const styles = StyleSheet.create({
   },
   subtitle: {
     fontSize: 14,
-    color: '#FFFFFF',
+    color: '#D7CCC8', // Light Brown text
     opacity: 0.9,
   },
   buttonContainer: {
@@ -355,7 +465,7 @@ const styles = StyleSheet.create({
     gap: 15,
   },
   button: {
-    backgroundColor: '#007AFF',
+    backgroundColor: '#6D4C41', // Medium Brown
     padding: 18,
     borderRadius: 12,
     alignItems: 'center',
@@ -395,7 +505,7 @@ const styles = StyleSheet.create({
   loadingText: {
     marginTop: 10,
     fontSize: 16,
-    color: '#007AFF',
+    color: '#4E342E',
     fontWeight: '600',
   },
   shiftsContainer: {
@@ -405,11 +515,11 @@ const styles = StyleSheet.create({
     fontSize: 22,
     fontWeight: 'bold',
     marginBottom: 5,
-    color: '#333',
+    color: '#3E2723',
   },
   sectionSubtitle: {
     fontSize: 14,
-    color: '#666',
+    color: '#8D6E63',
     marginBottom: 20,
   },
   shiftCard: {
@@ -422,15 +532,17 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 3,
     elevation: 2,
+    borderWidth: 1,
+    borderColor: '#EFEBE9',
   },
   input: {
-    backgroundColor: '#F8F8F8',
+    backgroundColor: '#FAFAFA',
     padding: 12,
     borderRadius: 8,
     marginBottom: 10,
     fontSize: 16,
     borderWidth: 1,
-    borderColor: '#E0E0E0',
+    borderColor: '#D7CCC8',
   },
   timeRow: {
     flexDirection: 'row',
@@ -447,7 +559,7 @@ const styles = StyleSheet.create({
     color: '#666',
   },
   deleteButton: {
-    backgroundColor: '#FF3B30',
+    backgroundColor: '#BCAAA4', // Lighter Brown/Gray for delete
     padding: 10,
     borderRadius: 8,
     alignItems: 'center',
@@ -459,7 +571,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   addButton: {
-    backgroundColor: '#34C759',
+    backgroundColor: '#5D4037', // Dark Brown
     padding: 18,
     borderRadius: 12,
     alignItems: 'center',
@@ -482,10 +594,10 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#E0E0E0',
+    borderColor: '#D7CCC8',
   },
   cancelButtonText: {
-    color: '#666',
+    color: '#8D6E63',
     fontSize: 16,
     fontWeight: '600',
   },
@@ -495,7 +607,49 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     fontSize: 16,
-    color: '#666',
+    color: '#8D6E63',
     marginBottom: 20,
+  },
+  webCalButton: {
+    backgroundColor: '#FFF',
+    borderWidth: 1,
+    borderColor: '#4E342E',
+    padding: 10,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginBottom: 10,
+    marginTop: 5,
+  },
+  webCalButtonText: {
+    color: '#4E342E',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  webNote: {
+    fontSize: 12,
+    color: '#8D6E63',
+    textAlign: 'center',
+    marginTop: 5,
+  },
+  qrContainer: {
+    alignItems: 'center',
+    marginTop: 20,
+    padding: 20,
+    backgroundColor: '#FFF8E1', // Very light yellow/beige
+    borderRadius: 12,
+    marginHorizontal: 20,
+    borderWidth: 1,
+    borderColor: '#FFE082',
+  },
+  qrTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginBottom: 10,
+    color: '#4E342E',
+  },
+  qrNote: {
+    fontSize: 12,
+    color: '#8D6E63',
+    marginTop: 5,
   },
 });
