@@ -39,6 +39,9 @@ export default {
     web: {
       favicon: "./assets/favicon.png"
     },
+    experiments: {
+      baseUrl: "/-V1.1/",
+    },
     plugins: [
       [
         "expo-image-picker",
