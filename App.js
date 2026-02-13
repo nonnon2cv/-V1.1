@@ -306,9 +306,9 @@ export default function App() {
                 <Text style={styles.qrTitle}>スマホで読み取ってモバイルで開く</Text>
                 <Image
                   style={{ width: 150, height: 150 }}
-                  source={{ uri: `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent('http://10.6.4.54:8083')}` }}
+                  source={{ uri: `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(window.location.href)}` }}
                 />
-                <Text style={styles.qrNote}>※同じWi-Fiに接続している必要があります</Text>
+                <Text style={styles.qrNote}>※iPhone/Androidのカメラで読み取ってください</Text>
               </View>
             )}
 
