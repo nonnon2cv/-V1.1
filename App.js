@@ -37,7 +37,7 @@ export default function App() {
 
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        quality: 1,
+        quality: 0.5, // Reduce quality for speed
         base64: true,
       });
 
@@ -47,6 +47,7 @@ export default function App() {
       }
     } catch (e) {
       setError('画像選択中にエラーが発生しました');
+      if (Platform.OS === 'web') alert('画像選択エラー: ' + e.message);
     }
   };
 
@@ -60,7 +61,7 @@ export default function App() {
     }
 
     const result = await ImagePicker.launchCameraAsync({
-      quality: 1,
+      quality: 0.5, // Reduce quality for speed
       base64: true,
     });
 
@@ -547,16 +548,13 @@ const styles = StyleSheet.create({
     fontWeight: 'bold', // Bolder text
   },
   errorContainer: {
-    position: 'absolute',
-    bottom: 20,
-    left: 20,
-    right: 20,
     backgroundColor: '#FFEBEE',
     padding: 15,
     borderRadius: 8,
     borderWidth: 1,
     borderColor: '#EF5350',
-    zIndex: 20,
+    marginTop: 20, // Add margin from image
+    width: '100%', // Full width
   },
   errorText: {
     color: '#D32F2F',
