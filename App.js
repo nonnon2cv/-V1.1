@@ -168,19 +168,49 @@ export default function App() {
     Linking.openURL(url);
   };
 
-  // カレンダーに追加ボタンが押されたとき (Mobile用)
+  // カレンダーに追加ボタンが押されたとき (Mobile用 & Web用)
   const addToCalendar = async () => {
-    // Webの場合はボタン自体を表示しないか、処理を分けるためここはNative専用
-    if (Platform.OS === 'web') {
-      Alert.alert('お知らせ', '各予定の「Googleカレンダーに追加」ボタンを使用してください。');
-      return;
-    }
-
     if (shifts.length === 0) {
       Alert.alert('エラー', '登録する予定がありません');
       return;
     }
 
+    // Webの場合は.icsファイルを生成してダウンロード
+    if (Platform.OS === 'web') {
+      try {
+        let icsContent = "BEGIN:VCALENDAR\nVERSION:2.0\nPRODID:-//Shift Calendar App//EN\n";
+
+        shifts.forEach(shift => {
+          const startDate = shift.date.replace(/-/g, '') + 'T' + shift.startTime.replace(/:/g, '') + '00';
+          const endDate = shift.date.replace(/-/g, '') + 'T' + shift.endTime.replace(/:/g, '') + '00';
+
+          icsContent += "BEGIN:VEVENT\n";
+          icsContent += `SUMMARY:${shift.title}\n`;
+          icsContent += `DTSTART;TZID=Asia/Tokyo:${startDate}\n`;
+          icsContent += `DTEND;TZID=Asia/Tokyo:${endDate}\n`;
+          icsContent += "END:VEVENT\n";
+        });
+
+        icsContent += "END:VCALENDAR";
+
+        const blob = new Blob([icsContent], { type: 'text/calendar;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.setAttribute('download', 'shifts.ics');
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+
+        Alert.alert('完了', 'カレンダーファイル(.ics)をダウンロードしました。\nファイルを開いてカレンダーに追加してください。');
+      } catch (e) {
+        console.error(e);
+        Alert.alert('エラー', 'カレンダーファイルの作成に失敗しました');
+      }
+      return;
+    }
+
+    // Native (iOS/Android) の場合はExpo Calendarを使用
     try {
       const { status } = await Calendar.requestCalendarPermissionsAsync();
       if (status !== 'granted') {
@@ -365,11 +395,9 @@ export default function App() {
                   </View>
                 ))}
 
-                {Platform.OS !== 'web' && (
-                  <TouchableOpacity style={styles.addButton} onPress={addToCalendar}>
-                    <Text style={styles.addButtonText}>カレンダーに一括登録</Text>
-                  </TouchableOpacity>
-                )}
+                <TouchableOpacity style={styles.addButton} onPress={addToCalendar}>
+                  <Text style={styles.addButtonText}>カレンダーに一括登録</Text>
+                </TouchableOpacity>
 
                 <TouchableOpacity
                   style={styles.cancelButton}
