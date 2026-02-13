@@ -524,17 +524,18 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    backgroundColor: 'rgba(255, 255, 255, 0.95)', // Slightly more opaque
     justifyContent: 'center',
     alignItems: 'center',
     borderRadius: 12,
     margin: 20,
+    zIndex: 10, // Ensure it's on top
   },
   loadingText: {
     marginTop: 10,
-    fontSize: 16,
+    fontSize: 18, // Larger text
     color: '#4E342E',
-    fontWeight: '600',
+    fontWeight: 'bold', // Bolder text
   },
   shiftsContainer: {
     padding: 20,
