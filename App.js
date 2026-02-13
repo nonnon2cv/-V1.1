@@ -23,13 +23,15 @@ export default function App() {
   const [shifts, setShifts] = useState([]);
   const [loading, setLoading] = useState(false);
   const [editing, setEditing] = useState(false);
+  const [error, setError] = useState(null);
 
   // 画像をギャラリーから選択
   const pickImage = async () => {
+    setError(null);
     try {
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert('エラー', 'ギャラリーへのアクセス許可が必要です');
+        setError('ギャラリーへのアクセス許可が必要です');
         return;
       }
 
@@ -44,15 +46,16 @@ export default function App() {
         analyzeShift(result.assets[0]);
       }
     } catch (e) {
-      Alert.alert('エラー', '画像選択中にエラーが発生しました');
+      setError('画像選択中にエラーが発生しました');
     }
   };
 
   // カメラで撮影
   const takePhoto = async () => {
+    setError(null);
     const { status } = await ImagePicker.requestCameraPermissionsAsync();
     if (status !== 'granted') {
-      Alert.alert('エラー', 'カメラへのアクセス許可が必要です');
+      setError('カメラへのアクセス許可が必要です');
       return;
     }
 
@@ -69,11 +72,12 @@ export default function App() {
 
   const analyzeShift = async (imageData) => {
     setLoading(true);
+    setError(null);
     const apiKey = process.env.EXPO_PUBLIC_GEMINI_API_KEY;
 
     try {
       if (!apiKey || apiKey === 'your_key_here') {
-        Alert.alert('設定エラー', '.envファイルにGemini APIキーを設定してください');
+        setError('設定エラー: .envファイルまたはGitHub Secretsに geminiApiKey (EXPO_PUBLIC_GEMINI_API_KEY) が設定されていません');
         setLoading(false);
         return;
       }
@@ -129,16 +133,16 @@ export default function App() {
           })));
           setEditing(true);
         } else {
-          Alert.alert('エラー', 'シフト情報を正しく抽出できませんでした');
+          setError('シフト情報を正しく抽出できませんでした\nAIの応答: ' + text.substring(0, 100));
         }
       } catch (e) {
         console.error("JSON Parse Error:", e);
-        Alert.alert('エラー', 'AIからの応答を解析できませんでした');
+        setError('AIからの応答を解析できませんでした\n' + e.message);
       }
 
     } catch (error) {
       console.error('解析エラー:', error);
-      Alert.alert('エラー', `シフトの解析に失敗しました: ${error.message}`);
+      setError(`シフトの解析に失敗しました: ${error.message}`);
     } finally {
       setLoading(false);
     }
@@ -325,6 +329,11 @@ export default function App() {
                   <View style={styles.loadingOverlay}>
                     <ActivityIndicator size="large" color="#007AFF" />
                     <Text style={styles.loadingText}>解析中...</Text>
+                  </View>
+                )}
+                {error && (
+                  <View style={styles.errorContainer}>
+                    <Text style={styles.errorText}>⚠️ {error}</Text>
                   </View>
                 )}
               </View>
@@ -536,6 +545,24 @@ const styles = StyleSheet.create({
     fontSize: 18, // Larger text
     color: '#4E342E',
     fontWeight: 'bold', // Bolder text
+  },
+  errorContainer: {
+    position: 'absolute',
+    bottom: 20,
+    left: 20,
+    right: 20,
+    backgroundColor: '#FFEBEE',
+    padding: 15,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#EF5350',
+    zIndex: 20,
+  },
+  errorText: {
+    color: '#D32F2F',
+    fontSize: 14,
+    fontWeight: 'bold',
+    textAlign: 'center',
   },
   shiftsContainer: {
     padding: 20,
